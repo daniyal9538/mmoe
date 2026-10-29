@@ -1,0 +1,11 @@
+# MNIST tutorial settings: 784 pixels, everything observed (no flags), a 20-epoch schedule (~30 s on a GPU).
+model:
+  use_obs_flags: false
+  phases:
+    warmup_end: 3
+    lambda_ramp_end: 8
+    harden_start: 14
+
+train:
+  epochs: 20
+  warmup_epochs: 1

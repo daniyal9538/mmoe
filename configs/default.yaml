@@ -1,0 +1,68 @@
+# Expert-choice M-MoE: every hyperparameter with its default (the setting used for the MIMIC-IV lab runs,
+# mmoe_expert_choice). Any key left out of a config keeps the default below; unknown keys raise an error.
+# What each one controls and what it affects: README.md, section "Hyperparameters".
+
+model:
+  # ---- architecture ----
+  experts_per_head: [4, 16, 64]   # one head per entry, coarse -> fine
+  expert_hidden: 16               # u
+  expert_out: 2                   # d_e
+  latent_dim: 64                  # d_z
+  dropout: 0.1
+  use_obs_flags: true             # input = [value, was-observed flag] per feature
+  column_units: false             # route value and flag separately (U = 2F)
+
+  # ---- expert-choice routing ----
+  r: 2                            # capacity factor: k = ceil(r * U / m) units per expert
+  capacity: null                  # fixed k (int, or list per head); overrides r
+  ec_surrogate: sigmoid           # sigmoid | softmax
+  ec_noise: 0.0                   # Gumbel exploration noise on routing scores (x temperature)
+
+  # ---- null (keep) gates ----
+  null_mode: per_head             # per_head | global | "off"   (quote "off": bare off is YAML false)
+  null_type: learned              # learned | fixed
+  null_q: 0.25                    # fixed null: fraction dropped
+  keep_init: 3.0
+
+  # ---- initialisation ----
+  gate_init: prior_corr           # prior_corr | random
+  init_scale: 2.0
+  init_noise: 0.1
+  prior_min_coobs: 50
+  train_gates: true
+
+  # ---- global input budget ----
+  input_budget: null              # K features, or null
+  budget_type: concrete           # concrete | topk
+  split_value_flag: false
+
+  # ---- regularizer weights ----
+  lambda_mem: 1.0e-2
+  lambda_null: 1.0e-3
+  lambda_col: 1.0e-3
+
+  phases:
+    warmup_end: 10
+    harden_start: 60
+    lambda_ramp_end: 35
+    temp_start: 1.0
+    temp_end: 0.1
+    gate_lr_mult: 10.0
+    finetune_lr_mult: 0.3
+
+train:
+  epochs: 100
+  batch_size: 512
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  betas: [0.9, 0.999]
+  warmup_epochs: 5
+  grad_clip: 1.0
+  decoder_hidden: [256, 512]
+  decoder_dropout: 0.1
+  huber_delta: 1.0
+  obs_bce_weight: 0.2
+  feature_loss_floor: null
+  patience: 10
+  bf16: true
+  seed: 0
