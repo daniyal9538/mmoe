@@ -181,5 +181,33 @@ def test_fit_smoke():
     assert all(g.hardened for g in res.model.encoder.gates())
 
 
+def test_graded_init_fills_seats_by_affinity():
+    # 1-D chain of units, affinity decays with distance: every expert's initial top-k must be one contiguous run.
+    pos = np.arange(F, dtype=float)
+    A = np.exp(-(pos[:, None] - pos[None]) ** 2 / 50)    # wide enough that no seat falls where affinity ~ 0
+    e = MMoEEncoder(F, model_config(experts_per_head=[4], gate_init="prior_corr", init_fill="graded",
+                                    use_obs_flags=False, null_mode="off"), abs_corr=A, seed=0)
+    G = e.heads[0].gate.hard_value()
+    assert (G.sum(0) == e.heads[0].gate.k).all()
+    for j in range(4):
+        idx = torch.nonzero(G[:, j]).flatten()
+        assert idx.max() - idx.min() + 1 == len(idx)
+
+
+def test_baselines_shapes_and_fit():
+    from mmoe.baselines import ConvEncoder, DenseEncoder, ViTEncoder, encoder_flops, fit_encoder
+    x = torch.rand(4, 784)
+    for e in (DenseEncoder(784, (32,)), ConvEncoder(channels=(4, 8, 8)), ConvEncoder(channels=(3,), strides=(2,), kernel=5),
+              ViTEncoder(dim=16, depth=1, heads=2)):
+        assert e(x).shape == (4, 64)
+        assert encoder_flops(e, x) > 0
+    rng = np.random.default_rng(0)
+    X = rng.random((96, 784)).astype(np.float32)
+    t = train_config(epochs=2, batch_size=32, warmup_epochs=0.5, bf16=False)
+    res = fit_encoder(lambda: ConvEncoder(channels=(4, 8, 8)), t, {"train": (X[:64], None), "val": (X[64:], None)},
+                      device="cpu")
+    assert res.best_epoch >= 0 and res.params["encoder_effective_params_final"] == res.params["encoder_params"]
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

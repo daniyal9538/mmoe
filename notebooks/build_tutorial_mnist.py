@@ -43,7 +43,7 @@ probe** (logistic regression on z), which measures how much digit information th
 | `kept_h*` | pixels the head keeps (not in its null) |
 | `orphan_h*` | kept pixels that **no** expert picked (in, but unused) |
 | `mem_h*` | mean number of experts reading a kept pixel (overlap) |
-| `changed_h*` | fraction of (pixel, expert) memberships that moved away from the initial assignment |
+| `changed_h*` | share of **all** (pixel, expert) pairs whose membership differs from the initial assignment (gained or lost). Not the share of memberships that moved: each expert holds only k of 784 pixels, so for that multiply by ≈ 784 / (2k), i.e. ×1 (head 0), ×4 (head 1), ×15.7 (head 2) |
 | `eff_params` | encoder weights actually used after hardening (masked weights excluded) |
 
 Each run trains for 20 epochs (≈ 30 s on a GPU): dense warm-up for epochs 0–2, gate learning for 3–13,
@@ -251,8 +251,10 @@ code(r"""plot_history("baseline")""")
 md(r"""
 **Reading the curves.** Phase 0 (orange) is a plain dense MLP, so the loss drops quickly. When gate
 learning starts (epoch 3), the loss jumps briefly: the experts suddenly lose most of their inputs. Most
-routing change (`changed vs init`) happens in that first gate-learning epoch and then plateaus. Coarse
-heads move most (head 0 ≈ 25% of memberships, head 2 ≈ 4%). The null acts later: P(keep) only crosses
+routing change (`changed vs init`) happens in that first gate-learning epoch and then plateaus. The
+fine heads move most: about 25% of head 0's memberships, ≈ 50% of head 1's and ≈ 55% of head 2's change.
+(The plotted values, 0.25 / 0.12 / 0.036, are rates over all pixel–expert pairs; see the metric table at the
+top for the conversion.) The null acts later: P(keep) only crosses
 0.5 once the temperature has fallen (≈ epochs 10–13), and then ~300 pixels, mostly the always-black
 border, are dropped. At epoch 14 everything is hardened: from then on the model is a fixed sparse network
 and only the weights are fine-tuned.
@@ -447,8 +449,8 @@ md(r"""
 * `random` puts each unit in ⌈r⌉ random experts.
 * `train_gates: false` freezes the initial assignment. This is a control: does *learning* the grouping
   help, and does it matter *which* pixels go together?
-* **Affects:** where routing starts (and, because routing moves only 4–25%, largely where it ends),
-  reconstruction and seed-to-seed stability.
+* **Affects:** where routing starts (and, partly, where it ends: from the prior start, routing moves ≈ 25%
+  of memberships in head 0 and ≈ 50–55% in heads 1–2), reconstruction and seed-to-seed stability.
 * `init_scale` (±2) sets how far the initial logits are from the selection boundary. Larger values make
   the initial assignment harder to leave.
 """)
@@ -466,7 +468,8 @@ md(r"""
 *better* than learned routing (≈ 0.0052–0.0053 vs 0.0055), with probes ~0.002 lower. Learning the
 routing does not pay off for pixel reconstruction in a 20-epoch run: the gate-learning phase perturbs
 the experts' inputs, and the frozen models get those epochs as clean training. `random_init` and the
-prior start end up similar. On MIMIC labs the picture was different (`prior_frozen` was clearly worse
+prior start end up similar, although routing moves less from a random start (≈ 17–19% of memberships in
+every head, vs ≈ 25–56% from the prior start). On MIMIC labs the picture was different (`prior_frozen` was clearly worse
 than learned), so this knob is data-dependent. Treat `train_gates: false` as a mandatory control.
 """)
 md(r"""
@@ -523,7 +526,8 @@ ax.set_title("head 1: routing changed vs init"); ax.set_xlabel("epoch"); ax.lege
 """)
 md(r"""
 **What we see.** `gate_lr_mult` is the main lever on how far gates move. At ×1 the keep logits never get
-from +3 to the boundary (head 2 keeps all 784), and head 0's routing barely moves (5% vs 25%). Going from
+from +3 to the boundary (head 2 keeps all 784), and head 0's routing barely moves (5% vs 25% of memberships;
+heads 1 and 2: ≈ 39% and ≈ 24% vs ≈ 49% and ≈ 56%). Going from
 ×10 to ×30 changes little more. Skipping the dense warm-up did *not* hurt on MNIST (slightly better recon),
 in line with the frozen-routing result: here the experts' weights adapt easily to whatever routing they
 get.

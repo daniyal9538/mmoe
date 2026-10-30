@@ -50,6 +50,7 @@ class ModelConfig:
     gate_init: str = "prior_corr"   # prior_corr (spectral clustering of |corr|) | random
     init_scale: float = 2.0         # routing logit +scale for initially assigned experts, -scale elsewhere
     init_noise: float = 0.1         # N(0, init_noise) jitter on initial routing logits
+    init_fill: str = "binary"       # prior_corr only: binary (+/-scale by cluster) | graded (by affinity to each cluster)
     prior_min_coobs: int = 50       # pairs co-observed fewer times get |corr| = 0 in the prior
     train_gates: bool = True        # False: assignments frozen at init (control)
     # ---- global input budget (feature selection in front of all heads) ----
@@ -71,6 +72,7 @@ class ModelConfig:
         one_of("null_mode", ("per_head", "global", "off"))
         one_of("null_type", ("learned", "fixed"))
         one_of("gate_init", ("prior_corr", "random"))
+        one_of("init_fill", ("binary", "graded"))
         one_of("budget_type", ("concrete", "topk"))
         one_of("ec_surrogate", ("sigmoid", "softmax"))
         if not self.experts_per_head or min(self.experts_per_head) < 1:

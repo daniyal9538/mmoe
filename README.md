@@ -46,7 +46,7 @@ Plain scripts, no packaging: code lives in `src/mmoe/`, and scripts and notebook
 python -m venv .venv && .venv\Scripts\activate        # or reuse an env with torch (CUDA build recommended)
 pip install -r requirements.txt
 
-python -m pytest tests                                # 16 unit tests, ~5 s
+python -m pytest tests                                # 18 unit tests, ~10 s
 python scripts/train.py --config configs/mnist.yaml --dataset mnist --out runs/mnist_baseline
 python scripts/train.py --config configs/default.yaml --data my_table.npz --out runs/x --set model.r=4 train.seed=1
 
@@ -184,6 +184,7 @@ Defaults are those of the MIMIC-IV `mmoe_expert_choice` run unless marked *new*.
 | `gate_init` | prior_corr | prior_corr, random | routing start: spectral clustering of train \|corr\| (k = m per head) vs ⌈r⌉ random experts per unit | prior gives coherent starting groups and is expected to be more stable across seeds; random tests whether the grouping comes from data or from the prior |
 | `init_scale` | 2.0 | float | ±scale on initial routing logits | stickiness of the start: larger values mean less movement for a given gate LR |
 | `init_noise` | 0.1 | float | N(0, σ) jitter on routing logits | breaks ties; seed diversity |
+| `init_fill` | binary | binary, graded | `prior_corr` only: binary gives ±`init_scale` by cluster; graded ranks every unit by its mean affinity to each cluster | with binary, seats beyond the cluster size (≈ half of them at r = 2, more if clusters are uneven) and seats freed by the null go to whichever unit the jitter favours. Graded fills them with the units most similar to the cluster. Any [U, U] affinity can be passed as the prior (e.g. a pixel-distance kernel for a spatial prior). *new* |
 | `prior_min_coobs` | 50 | int | pairs co-observed fewer times get \|corr\| = 0 | prior reliability for rarely measured features |
 | `train_gates` | true | bool | false freezes the initial assignment (hardened at build, warm-up still applies) | control: `prior_frozen` asks whether learning improves on the prior; random + frozen asks whether *which* features group matters |
 
@@ -242,7 +243,7 @@ assignments):
 | `n_kept`, `n_null` | units the head uses / ignores |
 | `mean_memberships` | mean number of experts reading a kept unit (overlap) |
 | `n_orphan` | kept units no expert picked (input but unused) *new* |
-| `changed_vs_init` | fraction of memberships that moved from the initial assignment *new* |
+| `changed_vs_init` | share of **all** (unit, expert) pairs whose membership differs from the initial assignment (gained or lost) *new*. Not the share of memberships that moved: multiply by ≈ U / (2k) for that (MNIST baseline: 0.25 / 0.12 / 0.036 for heads 0 / 1 / 2 ≈ 25% / 50% / 55% of memberships) |
 | `entropy_keep` | indecision of the keep gates (→ 0) |
 | `routing_margin` | mean gap between each expert's k-th and (k+1)-th logit (how settled the top-k is) *new* |
 | `in_kept`, `in_both`, `in_value_only`, `in_flag_only` | input budget summary |
@@ -295,7 +296,7 @@ parameters. One hyperparameter changed at a time:
 | `lambda_null` | sets null size (784 → ~490 → ~310 kept pixels for λ = 0, 1e-3, 1e-2), mostly border, at no recon/probe cost |
 | `null_mode`/`null_type` | probes within ±0.001; null off reconstructs best but leaves ~146 orphans in the fine head |
 | `train_gates`/`gate_init` | **negative result**: frozen routing (prior or random) reconstructs slightly *better* than learned routing, with probes ~0.002 lower. Learned routing gave no clear gain on MNIST (it did on MIMIC). Seed stability ARI 0.46–0.75, and the prior does not help it. |
-| `phases.gate_lr_mult` | main lever on how far gates move: at ×1 the null never forms and routing barely moves; ×10 vs ×30 is similar. No warm-up did not hurt. |
+| `phases.gate_lr_mult` | main lever on how far gates move: at ×1 the null never forms and head 0's routing barely moves (5% of memberships vs 25%; heads 1–2 ≈ 39% / 24% vs ≈ 49% / 56%); ×10 vs ×30 is similar. No warm-up did not hurt. |
 | `ec_surrogate`/`ec_noise`/`lambda_mem` | softmax ≈ sigmoid; `ec_noise = 1` hurts recon by ~25%; `lambda_mem = 0.1` cuts orphans 21 → 3 with no metric change |
 | `input_budget`/`budget_type` | concrete learns a digit-centred selection; top-K stays at its random start (border pixels included): lower recon error but clearly worse probe (0.865 vs 0.889 at K = 150) |
 | `use_obs_flags`/`column_units` (occluded MNIST) | probe 0.821 (values only), 0.833 (flags), 0.842 (separate value/flag units): same ordering as on MIMIC |

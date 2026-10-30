@@ -320,6 +320,26 @@ def logits_from_assignment(assign: list[list[int]] | np.ndarray, m: int, gen: to
     return L + noise * torch.randn(U, m, generator=gen)
 
 
+def logits_from_affinity(affinity: np.ndarray, labels: np.ndarray, m: int, k: int, gen: torch.Generator,
+                         scale: float = 2.0, noise: float = 0.1) -> torch.Tensor:
+    """Graded logits [U, m] from an affinity matrix [U, U] and cluster labels [U] (``init_fill='graded'``).
+
+    score[i, j] = mean affinity of unit i to the members of cluster j. Per expert, logits are the scores
+    rescaled so that the boundary between the k-th and (k+1)-th best unit sits at 0 and the mean of the
+    top k sits at +scale (clamped to +/-2 scale), plus N(0, noise) jitter. Why: with binary +/-scale logits
+    every seat beyond the cluster size (and every seat freed by the null) goes to whichever non-member the
+    jitter favours; graded logits fill those seats with the units most similar to the cluster instead.
+    """
+    onehot = np.eye(m)[labels]                                           # [U, m]
+    score = torch.as_tensor(affinity @ onehot / onehot.sum(0).clip(min=1), dtype=torch.float32)
+    k = min(k, score.shape[0] - 1)
+    top = score.topk(k + 1, dim=0).values                                # [k+1, m]
+    edge = 0.5 * (top[k - 1] + top[k])
+    spread = (top[:k].mean(0) - edge).clamp_min(1e-6)
+    L = (scale * (score - edge) / spread).clamp(-2 * scale, 2 * scale)
+    return L + noise * torch.randn(L.shape, generator=gen)
+
+
 def random_assignment(U: int, m: int, r: float, gen: torch.Generator) -> list[list[int]]:
     """Each unit joins min(round(r), m) distinct random experts (at least one)."""
     n = max(1, min(int(round(r)), m))

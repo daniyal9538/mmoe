@@ -28,6 +28,7 @@ model:
   gate_init: prior_corr           # prior_corr | random
   init_scale: 2.0
   init_noise: 0.1
+  init_fill: binary               # binary | graded (prior_corr only)
   prior_min_coobs: 50
   train_gates: true
 

@@ -49,8 +49,8 @@ import torch.nn as nn
 from . import regularizers as R
 from .config import ModelConfig
 from .experts import ExpertBank
-from .gates import (ExpertChoiceGate, FixedNullGate, HardConcreteGate, logits_from_assignment, random_assignment,
-                    spectral_groups)
+from .gates import (ExpertChoiceGate, FixedNullGate, HardConcreteGate, logits_from_affinity, logits_from_assignment,
+                    random_assignment, spectral_groups)
 from .input_gate import InputGate
 
 
@@ -116,11 +116,16 @@ class MMoEEncoder(nn.Module):
                 if abs_corr is None:
                     raise ValueError("gate_init='prior_corr' needs abs_corr (see mmoe.prior.abs_corr_prior)")
                 assign = spectral_groups(abs_corr, m, seed)
+                aff = abs_corr
                 if self.column_units:                                     # a feature's flag starts in its value's expert
                     assign = np.concatenate([assign, assign])
+                    aff = np.block([[abs_corr, abs_corr], [abs_corr, abs_corr]])
             else:
                 assign = random_assignment(U, m, r, gen)
-            L = logits_from_assignment(assign, m, gen, cfg.init_scale, cfg.init_noise)
+            if cfg.gate_init == "prior_corr" and cfg.init_fill == "graded":
+                L = logits_from_affinity(aff, assign, m, self.capacity(h, U), gen, cfg.init_scale, cfg.init_noise)
+            else:
+                L = logits_from_assignment(assign, m, gen, cfg.init_scale, cfg.init_noise)
             gate = ExpertChoiceGate(L, k=self.capacity(h, k_units), trainable=trainable,
                                     surrogate=cfg.ec_surrogate, noise=cfg.ec_noise)
             heads.append(MMoEHead(rows, m, gate, cfg.expert_hidden, cfg.expert_out, cfg.dropout))

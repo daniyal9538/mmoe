@@ -7,7 +7,9 @@ All counts use the *hard* assignments (what the model would use if hardened now)
 * mean_memberships    mean number of experts reading a kept unit (overlap between experts)
 * n_orphan            kept units that no expert picked: in the input but unused (an expert-choice failure
                       mode — the keep gate says "use it", but no expert ranks it in its top k)
-* changed_vs_init     fraction of (unit, expert) memberships that differ from the initial assignment
+* changed_vs_init     fraction of all (unit, expert) pairs whose membership differs from the initial
+                      assignment (gained or lost). Not the fraction of memberships that moved: each
+                      expert holds k of U units, so multiply by ~U / (2k) for that
 * entropy_keep        mean binary entropy of P(keep > 0): how undecided the null still is (-> 0)
 * routing_margin      mean over experts of (k-th best - (k+1)-th best logit): how settled the top-k is
 """
